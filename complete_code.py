@@ -44,7 +44,7 @@ def timeseries_to_supervised(data, lag):
 
 # create a differenced series
 def difference(dataset, interval=1):
-	diff = list()
+	diff = []
 	for i in range(interval, len(dataset)):
 		value = dataset[i] - dataset[i - interval]
 		diff.append(value)
@@ -69,7 +69,7 @@ def scale(train, test):
 
 # inverse scaling for a forecasted value
 def invert_scale(scaler, X, value):
-	new_row = [x for x in X] + [value]
+	new_row = list(X) + [value]
 	array = np.array(new_row)
 	array = array.reshape(1, len(array))
 	inverted = scaler.inverse_transform(array)
@@ -83,7 +83,7 @@ def fit_lstm(train, batch_size, nb_epoch, neurons):
 	model.add(LSTM(neurons, batch_input_shape=(batch_size, X.shape[1], X.shape[2]), stateful=True))
 	model.add(Dense(1))
 	model.compile(loss='mean_squared_error', optimizer='adam')
-	for i in range(nb_epoch):
+	for _ in range(nb_epoch):
 		model.fit(X, y, epochs=1, batch_size=batch_size, verbose=0, shuffle=False)
 		model.reset_states()
 	return model
@@ -110,11 +110,9 @@ ac_demand = []
 ac_cc = []
 date = []
 
-#unique SKU identifier
-uniqueness =[]
-for i in range(len(np.unique(data.SkuId))):
-    uniqueness.append(np.unique(data.SkuId)[i])
-    
+uniqueness = [
+	np.unique(data.SkuId)[i] for i in range(len(np.unique(data.SkuId)))
+]
 for i in (43, 44, 45, 76, 124, 144, 769, 1835, 2108):
     uniqueness.remove(i)
 
@@ -444,134 +442,131 @@ for i in uniqueness:
             
 #Predicting trend and clothes demand
 for i in (43, 44, 45, 76, 124, 144, 769, 1835, 2108):
-    spe_data = data[data.SkuId == i].reset_index(drop = True)
-    spe_data.AvgSP = spe_data.AvgSP.fillna(method = 'bfill', axis = 0)
-    spe_data.AvgSP = spe_data.AvgSP.fillna(method = 'ffill', axis = 0)
-    spe_data = spe_data.fillna(0)
-    
-    act_demand = []
-    for i in range(len(spe_data)):
-        spe_data.CustomerCount[i] = spe_data.CustomerCount[i] + spe_data.MissedCust[i]
-        act_demand.append(spe_data.OrderedQty[i] + spe_data.MissedDemand[i])
+	spe_data = data[data.SkuId == i].reset_index(drop = True)
+	spe_data.AvgSP = spe_data.AvgSP.fillna(method = 'bfill', axis = 0)
+	spe_data.AvgSP = spe_data.AvgSP.fillna(method = 'ffill', axis = 0)
+	spe_data = spe_data.fillna(0)
 
-    spe_data['ActualDemand'] = pd.DataFrame({'ActualDemand':act_demand})
+	act_demand = []
+	for i in range(len(spe_data)):
+	    spe_data.CustomerCount[i] = spe_data.CustomerCount[i] + spe_data.MissedCust[i]
+	    act_demand.append(spe_data.OrderedQty[i] + spe_data.MissedDemand[i])
 
-    duplicate_indices = []
-    for i in range(len(spe_data)-1):
-        if spe_data.DeliveryDate[i]==spe_data.DeliveryDate[i+1]:
-            duplicate_indices.append(i)
-        else:
-            count = 0
-    
-    for i in range(len(duplicate_indices)):
-        spe_data = spe_data.drop(spe_data.index[[duplicate_indices[i]]])
+	spe_data['ActualDemand'] = pd.DataFrame({'ActualDemand':act_demand})
 
-    spe_data = spe_data.reset_index(drop = True)
-    
-    
-    series_d = spe_data['ActualDemand']
-    #transform data to be stationary
-    raw_values_d = series_d.values
-    diff_values_d = difference(raw_values_d, 1)
-    
-    #selecting the best lag
-    lag1 = series_d.shift()
-    lag2 = lag1.shift()
-    lag3 = lag2.shift()
-    lag4 = lag3.shift()
-    lag5 = lag4.shift()
-    lag6 = lag5.shift()
-    lag7 = lag6.shift()
+	duplicate_indices = []
+	for i in range(len(spe_data)-1):
+	    if spe_data.DeliveryDate[i]==spe_data.DeliveryDate[i+1]:
+	        duplicate_indices.append(i)
+	    else:
+	        count = 0
 
-    lag_df_d = pd.DataFrame({'series':series_d, 'lag1':lag1, 'lag2':lag2, 'lag3':lag3, 'lag4':lag4, 'lag5':lag5, 'lag6':lag6, 'lag7':lag7})
-    lag_df_d = lag_df_d.drop(lag_df_d.index[[0, 1, 2, 3, 4, 5, 6]])
+	for duplicate_indice in duplicate_indices:
+		spe_data = spe_data.drop(spe_data.index[[duplicate_indice]])
 
-    comparison_d = []
-    for i in range(7):
-        comparison_d.append(np.corrcoef(lag_df_d.iloc[:, 0], lag_df_d.iloc[:, i+1])[0,1])
-    
-    for i in range(7):
-        if comparison_d[i] == np.max(comparison_d):
-            lag = i+1
-        else:
-            count = 0
-    
-    # transform data to be supervised learning
-    supervised_d = timeseries_to_supervised(diff_values_d, lag)
-    supervised_values_d = supervised_d.values
+	spe_data = spe_data.reset_index(drop = True)
 
-    # split data into train and test-sets
-    train_d, test_d = supervised_values_d[0:-step], supervised_values_d[-step:]
 
-    # transform the scale of the data
-    scaler_d, train_scaled_d, test_scaled_d = scale(train_d, test_d)
+	series_d = spe_data['ActualDemand']
+	#transform data to be stationary
+	raw_values_d = series_d.values
+	diff_values_d = difference(raw_values_d, 1)
 
-    # fit the model
-    lstm_model_d = fit_lstm(train_scaled_d, 1, asp_epochs, asp_neurons)
-    # forecast the entire training dataset to build up state for forecasting
-    train_reshaped_d = train_scaled_d[:, 0].reshape(len(train_scaled_d), 1, 1)
-    train_fit_d = lstm_model_d.predict(train_reshaped_d, batch_size=1)
+	#selecting the best lag
+	lag1 = series_d.shift()
+	lag2 = lag1.shift()
+	lag3 = lag2.shift()
+	lag4 = lag3.shift()
+	lag5 = lag4.shift()
+	lag6 = lag5.shift()
+	lag7 = lag6.shift()
 
-    train_reshaped_d1 = []
-    for i in range(len(train_fit_d)):
-        train_reshaped_d1.append(train_reshaped_d[i][0])
+	lag_df_d = pd.DataFrame({'series':series_d, 'lag1':lag1, 'lag2':lag2, 'lag3':lag3, 'lag4':lag4, 'lag5':lag5, 'lag6':lag6, 'lag7':lag7})
+	lag_df_d = lag_df_d.drop(lag_df_d.index[[0, 1, 2, 3, 4, 5, 6]])
 
-    # walk-forward validation on the test data
-    predictions_d = list()
-    for i in range(len(test_scaled_d)):
-        # make one-step forecast
-        X_d, y_d = test_scaled_d[i, 0:-1], test_scaled_d[i, -1]
-        yhat_d = forecast_lstm(lstm_model_d, 1, X_d)
-        #invert scaling
-        yhat_d = invert_scale(scaler_d, X_d, yhat_d)
-        #invert differencing
-        yhat_d = inverse_difference(raw_values_d, yhat_d, len(test_scaled_d)+1-i)
-        #store forecast
-        predictions_d.append(yhat_d)
-        expected_d = raw_values_d[len(train_d) + i + 1]
-        print('Day=%d, Predicted_d=%f, Expected_d=%f' % (i+1, yhat_d, expected_d))
+	comparison_d = [
+		np.corrcoef(lag_df_d.iloc[:, 0], lag_df_d.iloc[:, i + 1])[0, 1]
+		for i in range(7)
+	]
+	for i in range(7):
+	    if comparison_d[i] == np.max(comparison_d):
+	        lag = i+1
+	    else:
+	        count = 0
 
-    # report performance
-    rmse = sqrt(mean_squared_error(raw_values_d[-step:], predictions_d))
-    print('Test RMSE: %.3f' % rmse)
+	# transform data to be supervised learning
+	supervised_d = timeseries_to_supervised(diff_values_d, lag)
+	supervised_values_d = supervised_d.values
 
-    # line plot of observed vs predicted
-    plt.figure(figsize = (12,8))
-    plt.plot(train_reshaped_d1, color = 'blue', label = 'actual_values_scaled')
-    plt.plot(train_fit_d, color = 'red', label = 'fitted_values_scaled')
-    plt.ylabel('Demand')
-    plt.legend()
-    plt.title('Training fit on Demand')
-    plt.show()
+	    # split data into train and test-sets
+	train_d, test_d = supervised_values_d[:-step], supervised_values_d[-step:]
 
-    #prediction graph
-    plt.figure(figsize=(12,8))
-    plt.plot(predictions_d, color = 'red', label = 'predicted_values')
-    plt.plot(raw_values_d[r:], color = 'blue', label = 'actual_values')
-    plt.legend()
-    plt.ylabel('Demand')
-    plt.title('Predictions of Demand')
-    plt.show()
-    
-    forecast_d = []
-    for i in range(3):
-        forecast = forecast_lstm(lstm_model_d, 1, np.array([test_scaled_d[-1, -1]]))
-        forecast_is = invert_scale(scaler_d, np.array([test_scaled_d[-1, -1]]), forecast)
-        forecast_id = inverse_difference(raw_values_d, forecast_is, 1)
-        test_scaled_d[:,-1]+=np.array([forecast])
-        forecast_d.append(forecast_id)
-            
-    for i in range(3):
-        skuid.append(spe_data.SkuId[i])
-        sku.append(spe_data.SKUName[i])
-        forecasted_demand.append(forecast_d[i])
-        forecasted_cc.append('N/A')
-        ac_demand.append(spe_data.ActualDemand[i+r+step-3])
-        ac_cc.append(spe_data.CustomerCount[i+r+step-3])
-        pre_demand.append(predictions_d[i+step-3])
-        pre_cc.append('N/A')
-        date.append(i+index_of_today)
-        
+	# transform the scale of the data
+	scaler_d, train_scaled_d, test_scaled_d = scale(train_d, test_d)
+
+	# fit the model
+	lstm_model_d = fit_lstm(train_scaled_d, 1, asp_epochs, asp_neurons)
+	# forecast the entire training dataset to build up state for forecasting
+	train_reshaped_d = train_scaled_d[:, 0].reshape(len(train_scaled_d), 1, 1)
+	train_fit_d = lstm_model_d.predict(train_reshaped_d, batch_size=1)
+
+	train_reshaped_d1 = [train_reshaped_d[i][0] for i in range(len(train_fit_d))]
+	    # walk-forward validation on the test data
+	predictions_d = []
+	for i in range(len(test_scaled_d)):
+	    # make one-step forecast
+	    X_d, y_d = test_scaled_d[i, 0:-1], test_scaled_d[i, -1]
+	    yhat_d = forecast_lstm(lstm_model_d, 1, X_d)
+	    #invert scaling
+	    yhat_d = invert_scale(scaler_d, X_d, yhat_d)
+	    #invert differencing
+	    yhat_d = inverse_difference(raw_values_d, yhat_d, len(test_scaled_d)+1-i)
+	    #store forecast
+	    predictions_d.append(yhat_d)
+	    expected_d = raw_values_d[len(train_d) + i + 1]
+	    print('Day=%d, Predicted_d=%f, Expected_d=%f' % (i+1, yhat_d, expected_d))
+
+	# report performance
+	rmse = sqrt(mean_squared_error(raw_values_d[-step:], predictions_d))
+	print('Test RMSE: %.3f' % rmse)
+
+	# line plot of observed vs predicted
+	plt.figure(figsize = (12,8))
+	plt.plot(train_reshaped_d1, color = 'blue', label = 'actual_values_scaled')
+	plt.plot(train_fit_d, color = 'red', label = 'fitted_values_scaled')
+	plt.ylabel('Demand')
+	plt.legend()
+	plt.title('Training fit on Demand')
+	plt.show()
+
+	#prediction graph
+	plt.figure(figsize=(12,8))
+	plt.plot(predictions_d, color = 'red', label = 'predicted_values')
+	plt.plot(raw_values_d[r:], color = 'blue', label = 'actual_values')
+	plt.legend()
+	plt.ylabel('Demand')
+	plt.title('Predictions of Demand')
+	plt.show()
+
+	forecast_d = []
+	for _ in range(3):
+		forecast = forecast_lstm(lstm_model_d, 1, np.array([test_scaled_d[-1, -1]]))
+		forecast_is = invert_scale(scaler_d, np.array([test_scaled_d[-1, -1]]), forecast)
+		forecast_id = inverse_difference(raw_values_d, forecast_is, 1)
+		test_scaled_d[:,-1]+=np.array([forecast])
+		forecast_d.append(forecast_id)
+
+	for i in range(3):
+	    skuid.append(spe_data.SkuId[i])
+	    sku.append(spe_data.SKUName[i])
+	    forecasted_demand.append(forecast_d[i])
+	    forecasted_cc.append('N/A')
+	    ac_demand.append(spe_data.ActualDemand[i+r+step-3])
+	    ac_cc.append(spe_data.CustomerCount[i+r+step-3])
+	    pre_demand.append(predictions_d[i+step-3])
+	    pre_cc.append('N/A')
+	    date.append(i+index_of_today)
+
 
 pred = pd.DataFrame({'SkuId':skuid, 'SKUName':sku, 'actual_demand':ac_demand, 'predicted_demand':np.round(pre_demand), 'actual_customers':ac_cc, 'predicted customers':pre_cc})
 fore = pd.DataFrame({'SkuId':skuid, 'SKUName':sku, 'demand':forecasted_demand, 'customers':forecasted_cc, 'DeliveryDate':date})
